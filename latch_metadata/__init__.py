@@ -1,17 +1,15 @@
+from pathlib import Path
 
-from latch.types.metadata import (
-    NextflowMetadata,
-    LatchAuthor,
-    NextflowRuntimeResources
-)
 from latch.types.directory import LatchDir
+from latch.types.metadata import LatchAuthor, NextflowMetadata, NextflowRuntimeResources
 
-from .parameters import generated_parameters
+from .parameters import flow, generated_parameters
 
 NextflowMetadata(
-    display_name='nf-core/nanostring',
+    display_name="nf-core/nanostring",
+    about_page_path=Path("README.md"),
     author=LatchAuthor(
-        name="Your Name",
+        name="LatchBio",
     ),
     parameters=generated_parameters,
     runtime_resources=NextflowRuntimeResources(
@@ -19,5 +17,6 @@ NextflowMetadata(
         memory=8,
         storage_gib=100,
     ),
-    log_dir=LatchDir("latch:///your_log_dir"),
+    log_dir=LatchDir("latch:///nanostring"),
+    flow=flow,
 )
