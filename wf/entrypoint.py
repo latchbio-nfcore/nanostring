@@ -1,3 +1,4 @@
+import csv
 import os
 import shutil
 import subprocess
@@ -6,13 +7,14 @@ import typing
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from typing import Any, List, Optional
 
 import requests
 import typing_extensions
 from flytekit.core.annotation import FlyteAnnotation
 from latch.executions import rename_current_execution, report_nextflow_used_storage
 from latch.ldata.path import LPath
-from latch.resources.tasks import custom_task, nextflow_runtime_task
+from latch.resources.tasks import custom_task, nextflow_runtime_task, small_task
 from latch.resources.workflow import workflow
 from latch.types import metadata
 from latch.types.directory import LatchDir, LatchOutputDir
@@ -59,11 +61,48 @@ class Sample:
     RCC_FILE: LatchFile
     RCC_FILE_NAME: str
     SAMPLE_ID: str
+    TREATMENT: typing.Optional[str] = None
+    SOURCE: typing.Optional[str] = None
+    OTHER_METADATA: typing.Optional[str] = None
 
 
-input_construct_samplesheet = metadata._nextflow_metadata.parameters[
-    "input"
-].samplesheet_constructor
+@small_task
+def custom_samplesheet_constructor(
+    samples: List[Sample], outdir: LatchOutputDir, run_name: str
+) -> LatchFile:
+    samplesheet = Path("/root/samplesheet.csv")
+    columns = [
+        "RCC_FILE",
+        "RCC_FILE_NAME",
+        "SAMPLE_ID",
+        "TREATMENT",
+        "SOURCE",
+        "OTHER_METADATA",
+    ]
+
+    with open(samplesheet, "w") as f:
+        writer = csv.DictWriter(f, columns, delimiter=",")
+        writer.writeheader()
+        for sample in samples:
+            writer.writerow(
+                {
+                    "RCC_FILE": sample.RCC_FILE.remote_path,
+                    "RCC_FILE_NAME": sample.RCC_FILE_NAME,
+                    "SAMPLE_ID": sample.SAMPLE_ID,
+                    "TREATMENT": sample.TREATMENT,
+                    "SOURCE": sample.SOURCE,
+                    "OTHER_METADATA": sample.OTHER_METADATA,
+                }
+            )
+
+    return LatchFile(
+        str(samplesheet), remote_path=f"{outdir.remote_path}/{run_name}/samplesheet.csv"
+    )
+
+
+# input_construct_samplesheet = metadata._nextflow_metadata.parameters[
+#     "input"
+# ].samplesheet_constructor
 
 
 @nextflow_runtime_task(cpu=4, memory=8, storage_gib=100)
@@ -93,7 +132,9 @@ def nextflow_runtime(
     latch_log_dir = urljoins("latch:///nanostring/nf_nf_core_nanostring", exec_name)
     print(f"Log directory: {latch_log_dir}")
 
-    input_samplesheet = input_construct_samplesheet(input)
+    input_samplesheet = custom_samplesheet_constructor(
+        samples=input, run_name=run_name, outdir=outdir
+    )
 
     to_ignore = {
         "latch",
